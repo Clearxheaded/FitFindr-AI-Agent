@@ -92,9 +92,52 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Before writing code, complete the Planning Loop and State Management sections
     of planning.md — your implementation should match what you described there.
     """
-    # TODO: implement the planning loop
+    # Step 1: Initialize session
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # Step 2: Parse query — extract description, size, max_price using simple string parsing
+    import re
+
+    # Extract max_price (looks for "under $30" or "$30")
+    price_match = re.search(r'\$(\d+(?:\.\d+)?)', query)
+    max_price = float(price_match.group(1)) if price_match else None
+
+    # Extract size (looks for "size M" or standalone S/M/L/XL/XXS etc.)
+    size_match = re.search(r'\bsize\s*([A-Z]{1,3})\b|\b(XS|S|M|L|XL|XXL|XXS)\b', query, re.IGNORECASE)
+    size = (size_match.group(1) or size_match.group(2)).upper() if size_match else None
+
+    # Description: remove price and size mentions, use the rest
+    description = re.sub(r'\$\d+(?:\.\d+)?', '', query)
+    description = re.sub(r'\bunder\b|\bsize\s*[A-Z]{1,3}\b', '', description, flags=re.IGNORECASE)
+    description = description.strip()
+
+    session["parsed"] = {
+        "description": description,
+        "size": size,
+        "max_price": max_price,
+    }
+
+    # Step 3: Search listings
+    results = search_listings(description, size=size, max_price=max_price)
+    session["search_results"] = results
+
+    if not results:
+        session["error"] = (
+            "No listings found for your search — try a broader description, "
+            "different size, or higher price limit."
+        )
+        return session
+
+    # Step 4: Select top result
+    session["selected_item"] = results[0]
+
+    # Step 5: Suggest outfit
+    session["outfit_suggestion"] = suggest_outfit(results[0], wardrobe)
+
+    # Step 6: Create fit card
+    session["fit_card"] = create_fit_card(session["outfit_suggestion"], results[0])
+
+    # Step 7: Return session
     return session
 
 
